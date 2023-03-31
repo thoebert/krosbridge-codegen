@@ -25,4 +25,4 @@ Feel free to open a new issue/pull-request about any possible improvement.
 
 ## License
 
-This project is licensed under the BSD - see the [License.md](License.md) file for details.
+This project is licensed under the BSD - see the [License](License) file for details.
