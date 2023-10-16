@@ -142,11 +142,11 @@ class Writer(val packagePrefix : String = ""){
     }
 
     fun splitClassNameData(name : String) : Pair<String, String>{
-        val index = name.lastIndexOf("/")
+        val index = name.lastIndexOfAny("/\\".toCharArray())
         return if (index == -1) {
             "" to name
         } else {
-            name.substring(0, index).replace("/", ".") to name.substring(index+1)
+            name.substring(0, index).replace("/\\\\".toRegex(), ".") to name.substring(index+1)
         }
 
     }
