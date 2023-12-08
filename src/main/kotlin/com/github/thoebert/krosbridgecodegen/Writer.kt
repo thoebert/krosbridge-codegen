@@ -69,9 +69,11 @@ class Writer(val packagePrefix : String = ""){
     }
 
     fun writeAction(folder: File, it: Action) {
-        writeClass(folder, "${it.name}Goal", it.goal)
-        writeClass(folder, "${it.name}Result", it.result)
-        writeClass(folder, "${it.name}Feedback", it.feedback)
+        val goal = mutableListOf<Field>(Field("actionlib_msgs/GoalID", "goal_id"))
+        goal.addAll(it.goal)
+        writeClass(folder, "${it.name}Goal", goal, messageClassName)
+        writeClass(folder, "${it.name}Result", it.result, messageClassName)
+        writeClass(folder, "${it.name}Feedback", it.feedback, messageClassName)
     }
 
     fun prefixPackage(packageName : String) : String {
