@@ -23,14 +23,12 @@ fun readTypes(folder : File): Sequence<ROSType> {
     return folder.walk().map {
         var rosType : ROSType? = null
         if (it.isFile && !it.isHidden){
-            val extension = it.extension
-            val filename = it.name.removeSuffix("."+extension)
-            val name = it.relativeTo(folder).parentFile.parentFile.resolve(filename).toString()
+            val type = Type(it.nameWithoutExtension, it.parentFile.parentFile.name)
             val fileContent = it.readText()
             rosType = when (it.extension) {
-                "msg" -> parseMessage(name, fileContent)
-                "srv" -> parseService(name, fileContent)
-                "action" -> parseAction(name, fileContent)
+                "msg" -> parseMessage(type, fileContent)
+                "srv" -> parseService(type, fileContent)
+                "action" -> parseAction(type, fileContent)
                 else -> null
             }
         }

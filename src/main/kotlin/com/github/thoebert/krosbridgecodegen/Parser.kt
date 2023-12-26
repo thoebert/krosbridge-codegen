@@ -64,16 +64,16 @@ fun parseAndCheckFields(fieldCount : Int, text: String) : List<List<Field>>{
     return fields
 }
 
-fun parseMessage(name : String, text: String) : Message {
-    return Message(createTypeFromString(name), parseAndCheckFields(1, text)[0])
+fun parseMessage(name : Type, text: String) : Message {
+    return Message(name, parseAndCheckFields(1, text)[0])
 }
 
-fun parseService(name : String, text: String) : Service {
+fun parseService(name : Type, text: String) : Service {
     val fields = parseAndCheckFields(2, text)
-    return Service(createTypeFromString(name), fields[0], fields[1])
+    return Service(name, fields[0], fields[1])
 }
 
-fun parseAction(name : String, text: String) : Action {
+fun parseAction(name : Type, text: String) : Action {
     val fields = parseAndCheckFields(3, text)
-    return Action(createTypeFromString(name), fields[0], fields[1], fields[2])
+    return Action(name, fields[0], fields[1], fields[2])
 }
