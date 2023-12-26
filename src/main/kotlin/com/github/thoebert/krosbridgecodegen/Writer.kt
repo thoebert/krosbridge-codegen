@@ -6,20 +6,20 @@ import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.plusParameter
 import java.io.File
 
 val primitiveTypes = mapOf(
-    "bool" to BOOLEAN,
-    "byte" to BYTE,
-    "char" to CHAR,
-    "string" to STRING,
-    "float32" to FLOAT,
-    "float64" to DOUBLE,
-    "int8" to BYTE,
-    "uint8" to SHORT,
-    "int16" to SHORT,
-    "uint16" to INT,
-    "int32" to INT,
-    "uint32" to LONG,
-    "int64" to LONG,
-    "uint64" to LONG,
+    Type("bool") to BOOLEAN,
+    Type("byte") to BYTE,
+    Type("char") to CHAR,
+    Type(className = "string") to STRING,
+    Type("float32") to FLOAT,
+    Type("float64") to DOUBLE,
+    Type("int8") to BYTE,
+    Type("uint8") to SHORT,
+    Type("int16") to SHORT,
+    Type("uint16") to INT,
+    Type("int32") to INT,
+    Type("uint32") to LONG,
+    Type("int64") to LONG,
+    Type("uint64") to LONG,
 )
 
 val krosbridgePackageName = "com.github.thoebert.krosbridge"
@@ -64,32 +64,31 @@ class Writer(val packagePrefix : String = ""){
 
     fun writeService(folder: File, it: Service) {
         writeServiceClass(folder, it)
-        writeClass(folder, "${it.name}$requestSuffix", it.request, serviceRequestClassName)
-        writeClass(folder, "${it.name}$responseSuffix", it.response, serviceResponseClassName)
+        writeClass(folder, it.name.copyWithClassSuffix(requestSuffix), it.request, serviceRequestClassName)
+        writeClass(folder, it.name.copyWithClassSuffix(responseSuffix), it.response, serviceResponseClassName)
     }
 
     fun writeAction(folder: File, it: Action) {
-        writeClass(folder, "${it.name}Goal", it.goal)
-        writeClass(folder, "${it.name}Result", it.result)
-        writeClass(folder, "${it.name}Feedback", it.feedback)
+        writeClass(folder, it.name.copyWithClassSuffix("Goal"), it.goal)
+        writeClass(folder, it.name.copyWithClassSuffix("Result"), it.result)
+        writeClass(folder, it.name.copyWithClassSuffix("Feedback"), it.feedback)
     }
 
-    fun prefixPackage(packageName : String) : String {
-        if (packageName.isEmpty()) return packagePrefix
+    fun prefixPackage(packageName : String?) : String {
+        if (packageName == null) return packagePrefix
         return "$packagePrefix.$packageName"
     }
 
-    fun writeClass(folder : File, name : String, fields : List<Field>, parentName : ClassName? = null) {
-        val (packageName, className) = splitClassNameData(name)
+    fun writeClass(folder : File, name : Type, fields : List<Field>, parentName : ClassName? = null) {
 
-        val classBuilder = TypeSpec.classBuilder(className)
+        val classBuilder = TypeSpec.classBuilder(name.className)
         parentName?.let { classBuilder.superclass(it) }
         classBuilder.addAnnotation(AnnotationSpec.builder(serializableAnnotation).build())
         if (fields.isNotEmpty()) classBuilder.addModifiers(KModifier.DATA)
 
         val constructor = FunSpec.constructorBuilder()
         fields.filter { it.isVariable }.forEach {
-            val mappedType = mapType(it, packageName)
+            val mappedType = mapType(it, name.packageName)
             constructor.addParameter(it.name, mappedType)
             classBuilder.addProperty(PropertySpec.builder(it.name, mappedType)
                     .initializer(it.name).build())
@@ -110,7 +109,7 @@ class Writer(val packagePrefix : String = ""){
             classBuilder.addType(companionObject.build())
         }
 
-        writeClassToFile(folder, classBuilder, prefixPackage(packageName), className)
+        writeClassToFile(folder, classBuilder, prefixPackage(name.packageName), name.className)
     }
 
     private fun writeClassToFile(folder: File, classBuilder : TypeSpec.Builder, packageName: String, className: String){
@@ -119,46 +118,35 @@ class Writer(val packagePrefix : String = ""){
         file.build().writeTo(folder)
     }
 
-    fun mapType(field : Field, currentPackage : String) : TypeName {
-        if (field.type == "Header") return ClassName(prefixPackage("std_msgs"),"Header")
-        if (field.type == "time") return ClassName(prefixPackage("std_msgs.primitive"),"Time")
-        if (field.type == "duration") return ClassName(prefixPackage("std_msgs.primitive"),"Duration")
+    fun mapType(field : Field, currentPackage : String?) : TypeName {
+        if (field.type.equals(Type("Header"))) return ClassName(prefixPackage("std_msgs"),"Header")
+        if (field.type.equals(Type("time"))) return ClassName(prefixPackage("std_msgs.primitive"),"Time")
+        if (field.type.equals(Type("duration"))) return ClassName(prefixPackage("std_msgs.primitive"),"Duration")
         val baseType = primitiveTypes[field.type] ?: complexType(field, currentPackage)
         return if (field.isArray) LIST.parameterizedBy(baseType) else baseType
     }
 
-    fun mapPrimitiveType(name : String) : ClassName{
+    fun mapPrimitiveType(name : Type) : ClassName{
         return primitiveTypes[name] ?: throw IllegalArgumentException("Invalid primitive type $name")
     }
 
-    fun complexType(field : Field, currentPackage : String) : ClassName {
-        var (packageName, typeName) = splitClassNameData(field.type)
-        if (packageName.isEmpty()){
+    fun complexType(field : Field, currentPackage : String?) : ClassName {
+        var packageName = field.type.packageName
+        if (packageName == null){
             packageName = currentPackage
         } else if (defaultPackages.contains(packageName)){
-            return ClassName("$defaultPackageName.$packageName", typeName)
+            return ClassName("$defaultPackageName.$packageName", field.type.className)
         }
-        return ClassName(prefixPackage(packageName), typeName)
-    }
-
-    fun splitClassNameData(name : String) : Pair<String, String>{
-        val index = name.lastIndexOfAny("/\\".toCharArray())
-        return if (index == -1) {
-            "" to name
-        } else {
-            name.substring(0, index).replace("/\\\\".toRegex(), ".") to name.substring(index+1)
-        }
-
+        return ClassName(prefixPackage(packageName), field.type.className)
     }
 
     fun writeServiceClass(folder: File, service: Service) {
-        val (packageName, className) = splitClassNameData(service.name)
-        val prefixedPackageName = prefixPackage(packageName)
+        val prefixedPackageName = prefixPackage(service.name.packageName)
 
-        val requestClassName = ClassName(prefixedPackageName, "${className}$requestSuffix")
-        val responseClassName = ClassName(prefixedPackageName, "${className}$responseSuffix")
+        val requestClassName = ClassName(prefixedPackageName, service.name.copyWithClassSuffix(requestSuffix).className)
+        val responseClassName = ClassName(prefixedPackageName, service.name.copyWithClassSuffix(responseSuffix).className)
 
-        val classBuilder = TypeSpec.classBuilder(className)
+        val classBuilder = TypeSpec.classBuilder(service.name.className)
 
         val constructor = FunSpec.constructorBuilder()
         constructor.addParameter("ros", ClassName(krosbridgePackageName, "Ros"))
@@ -181,27 +169,26 @@ class Writer(val packagePrefix : String = ""){
         requestFn.returns(Pair::class.asClassName()
                 .plusParameter(responseClassName.copy(true))
                 .plusParameter(Boolean::class))
-        val reqParamNames = addParams(service.request, requestFn, packageName)
+        val reqParamNames = addParams(service.request, requestFn, service.name.packageName )
         requestFn.addStatement("return super.call(%T(%L))", requestClassName, reqParamNames)
         classBuilder.addFunction(requestFn.build())
 
         val sendResponseFn = FunSpec.builder("sendResponse")
-        val respParamNames = addParams(service.response, sendResponseFn, packageName)
+        val respParamNames = addParams(service.response, sendResponseFn, service.name.packageName)
         sendResponseFn.addParameter("serviceResult", Boolean::class)
         sendResponseFn.addParameter("serviceId", String::class.asClassName().copy(true))
         sendResponseFn.addStatement("return super.sendResponse(%T(%L), serviceResult, serviceId)", responseClassName, respParamNames)
         classBuilder.addFunction(sendResponseFn.build())
 
-        writeClassToFile(folder, classBuilder, prefixedPackageName, className)
+        writeClassToFile(folder, classBuilder, prefixedPackageName, service.name.className)
 
     }
 
     fun writeTopicClass(folder: File, message: Message) {
-        val (packageName, className) = splitClassNameData(message.name)
-        val prefixedPackageName = prefixPackage(packageName)
+        val prefixedPackageName = prefixPackage(message.name.packageName)
 
-        val messageClassName = ClassName(prefixedPackageName, className)
-        val topicClassName = ClassName(prefixedPackageName, "${className}$topicSuffix")
+        val messageClassName = ClassName(prefixedPackageName, message.name.className)
+        val topicClassName = ClassName(prefixedPackageName, message.name.copyWithClassSuffix(topicSuffix).className)
 
         val classBuilder = TypeSpec.classBuilder(topicClassName)
 
@@ -219,7 +206,7 @@ class Writer(val packagePrefix : String = ""){
             .addSuperclassConstructorParameter("%T::class", messageClassName)
 
         val publishFn = FunSpec.builder("publish")
-        val reqParamNames = addParams(message.fields, publishFn, packageName)
+        val reqParamNames = addParams(message.fields, publishFn, message.name.packageName)
         publishFn.addStatement("return super.publish(%T(%L))", messageClassName, reqParamNames)
         classBuilder.addFunction(publishFn.build())
 
@@ -227,7 +214,7 @@ class Writer(val packagePrefix : String = ""){
 
     }
 
-    private fun addParams(fields : List<Field>, fn : FunSpec.Builder, packageName : String) : String {
+    private fun addParams(fields : List<Field>, fn : FunSpec.Builder, packageName : String?) : String {
         return fields.filter { it.isVariable }.map { f ->
             val pName = f.name
             fn.addParameter(pName, mapType(f, packageName))

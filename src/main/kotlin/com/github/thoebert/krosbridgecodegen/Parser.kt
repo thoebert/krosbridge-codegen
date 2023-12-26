@@ -39,7 +39,7 @@ object FieldsGrammar : Grammar<List<List<Field>>>() {
     }
 
     val field by typeParser * text * optional(-equals * text) map { (type, name, value) ->
-        Field(type.first, name, value, type.second)
+        Field(createTypeFromString(type.first), name, value, type.second)
     }
 
     val group by separated(field, lineSep, true) map { it.terms }
@@ -65,15 +65,15 @@ fun parseAndCheckFields(fieldCount : Int, text: String) : List<List<Field>>{
 }
 
 fun parseMessage(name : String, text: String) : Message {
-    return Message(name, parseAndCheckFields(1, text)[0])
+    return Message(createTypeFromString(name), parseAndCheckFields(1, text)[0])
 }
 
 fun parseService(name : String, text: String) : Service {
     val fields = parseAndCheckFields(2, text)
-    return Service(name, fields[0], fields[1])
+    return Service(createTypeFromString(name), fields[0], fields[1])
 }
 
 fun parseAction(name : String, text: String) : Action {
     val fields = parseAndCheckFields(3, text)
-    return Action(name, fields[0], fields[1], fields[2])
+    return Action(createTypeFromString(name), fields[0], fields[1], fields[2])
 }
