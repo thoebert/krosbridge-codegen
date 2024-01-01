@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "io.github.thoebert"
-version = "1.0.4"
+version = "1.0.5"
 
 repositories {
     mavenCentral()
