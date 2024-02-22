@@ -60,7 +60,7 @@ class FieldsParser {
             fatherField.children.add(field)
             return
         }
-        parseField(position + newPosition - 1, fatherField, groupPosition = groupPosition, nestedLevel)
+        parseField(newPosition , null, groupPosition = groupPosition, nestedLevel)
 
     }
 

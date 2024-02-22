@@ -36,8 +36,8 @@ class ParserKtTest {
                 )
             ), parseFields(
                 """
-            float temperature # = comment
-            float32 temperature2 = 3 # comment2
+float temperature # = comment
+float32 temperature2 = 3 # comment2
         """
             )
         )
@@ -69,8 +69,7 @@ class ParserKtTest {
                 )
             ),
             parseFields(
-                """
-Vector3  linear
+                """Vector3  linear
 	float64 x
 	float64 y
 	float64 z
