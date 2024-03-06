@@ -4,6 +4,7 @@ import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.plusParameter
 import java.io.File
+import java.io.FileFilter
 
 val primitiveTypes = mapOf(
     Type("bool") to BOOLEAN,
@@ -79,6 +80,28 @@ class Writer(val packagePrefix : String = ""){
         return "$packagePrefix.$packageName"
     }
 
+    private fun checkIfTypeExist(type: TypeName, folder: File): Boolean{
+        if (primitiveTypes.containsValue(type) || type == LIST) return true
+        return folder.listFiles(FileFilter { it.name == "$type.kt" })?.isNotEmpty() ?: false
+    }
+
+    private fun writeComplexType(field: Field, folder: File, packageName: String?){
+        if (!field.isComplex) return
+        if (checkIfTypeExist(mapType(field, currentPackage = field.type.packageName), folder)) return
+        val classBuilder = TypeSpec.classBuilder(field.type.className)
+        classBuilder.addAnnotation(AnnotationSpec.builder(serializableAnnotation).build())
+        val constructor = FunSpec.constructorBuilder()
+        field.children.filter { it.isVariable }.forEach {
+            val mappedType = mapType(it, field.type.packageName)
+            constructor.addParameter(it.name, mappedType)
+            classBuilder.addProperty(PropertySpec.builder(it.name, mappedType)
+                .initializer(it.name).build())
+            writeComplexType(it, folder, packageName)
+        }
+        classBuilder.primaryConstructor(constructor.build())
+        writeClassToFile(folder, classBuilder,  prefixPackage(packageName ), field.type.className)
+    }
+
     private fun writeClass(folder : File, name : Type, fields : List<Field>, parentName : ClassName? = null) {
 
         val classBuilder = TypeSpec.classBuilder(name.className)
@@ -92,7 +115,7 @@ class Writer(val packagePrefix : String = ""){
             constructor.addParameter(it.name, mappedType)
             classBuilder.addProperty(PropertySpec.builder(it.name, mappedType)
                     .initializer(it.name).build())
-
+            writeComplexType(it, folder, name.packageName)
         }
         classBuilder.primaryConstructor(constructor.build())
 
@@ -108,6 +131,7 @@ class Writer(val packagePrefix : String = ""){
             }
             classBuilder.addType(companionObject.build())
         }
+
 
         writeClassToFile(folder, classBuilder, prefixPackage(name.packageName), name.className)
     }

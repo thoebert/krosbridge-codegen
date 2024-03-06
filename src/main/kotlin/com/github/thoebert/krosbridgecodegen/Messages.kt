@@ -38,6 +38,9 @@ data class Field(
     val isVariable: Boolean
         get() = value == null
 
+    val isComplex: Boolean
+        get() = children.isNotEmpty()
+
     override fun toString(): String {
         return "$type $name" + (if (value != null) "=$value" else "") + (if (children.size != 0) "\n${children.joinToString("\n") {"\t" + it.toString() }}\n" else "")
     }
