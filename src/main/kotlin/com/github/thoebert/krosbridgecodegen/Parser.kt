@@ -11,18 +11,29 @@ class FieldsParser {
     private val groups: MutableList<MutableList<Field>> = mutableListOf(mutableListOf())
 
     fun parseField(position: Int, fatherField: Field? = null, groupPosition: Int = 0, nestedLevel: String = "") {
-        if (position > lines.lastIndex) return
+        if (position > lines.lastIndex) {
+            if (groups.size == 0) groups.add(mutableListOf())
+            return
+        }
+        if (position == lines.lastIndex && lines[position] == "---") {
+            groups.add(mutableListOf())
+            groups.add(mutableListOf())
+            return
+        }
         if (lines[position].isBlank()) return parseField(
             position + 1,
             fatherField,
             groupPosition = groupPosition,
             nestedLevel
         )
-        if (lines[position] == "---") return parseField(position + 1)
-
+        if (lines[position] == "---") {
+            groups.add(mutableListOf())
+            return parseField(position + 1, groupPosition = groupPosition + 1)
+        }
+        if (lines[position].startsWith("#")) return parseField(position + 1, groupPosition = groupPosition)
         // regex demonstration: https://regex101.com/r/Fc8wUB/1
         val matched =
-            Regex("(?<type>[\\w_\\-/]+|[\\d+])(\\[<?=?(?<size>\\d+)]|<?=?(?<size2>\\d+))?\\s+(?<name>[\\w_\\-/]+)([\\s]{0,}?=[\\s]{0,}(?<value>\\S*[\\w_\\-/]+|[\\d+]))?").find(
+            Regex("(?<type>[\\w_\\-/]+|[\\d+])(\\[<?=?(?<size>\\d+)?]|<?=?(?<size2>\\d+))?\\s+(?<name>[\\w_\\-/]+)([\\s]{0,}?=[\\s]{0,}(?<value>\\S*[\\w_\\-/]+|[\\d+]))?").find(
                 lines[position]
             )
                 ?: return parseField(position + 1)
@@ -54,13 +65,14 @@ class FieldsParser {
             newPosition++
         }
         if (fatherField == null) {
-            if (groupPosition == groups.size) groups.add(mutableListOf())
+            while (groupPosition >= groups.size) groups.add(mutableListOf())
+            // if (groupPosition == groups.size || (groupPosition == 1 && groups.size == 0) ) groups.add(mutableListOf())
             groups[groupPosition].add(field)
         } else {
             fatherField.children.add(field)
             return
         }
-        parseField(newPosition , null, groupPosition = groupPosition, nestedLevel)
+        parseField(newPosition, null, groupPosition = groupPosition, nestedLevel)
 
     }
 
