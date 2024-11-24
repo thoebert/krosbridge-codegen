@@ -120,8 +120,8 @@ class Writer(val packagePrefix : String = ""){
 
     fun mapType(field : Field, currentPackage : String?) : TypeName {
         if (field.type.equals(Type("Header"))) return ClassName(prefixPackage("std_msgs"),"Header")
-        if (field.type.equals(Type("time"))) return ClassName(prefixPackage("std_msgs.primitive"),"Time")
-        if (field.type.equals(Type("duration"))) return ClassName(prefixPackage("std_msgs.primitive"),"Duration")
+        if (field.type.equals(Type("time"))) return ClassName(prefixPackage("primitive"),"Time")
+        if (field.type.equals(Type("duration"))) return ClassName(prefixPackage("primitive"),"Duration")
         val baseType = primitiveTypes[field.type] ?: complexType(field, currentPackage)
         return if (field.isArray) LIST.parameterizedBy(baseType) else baseType
     }
