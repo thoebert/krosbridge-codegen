@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 
 plugins {
-    kotlin("jvm") version "1.7.21"
+    kotlin("jvm") version "1.9.0"
     application
     `java-gradle-plugin`
     `maven-publish`
@@ -18,8 +18,8 @@ repositories {
 
 dependencies {
     implementation("com.github.h0tk3y.betterParse:better-parse:0.4.4")
-    implementation("com.squareup:kotlinpoet:1.12.0")
-    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:1.3.61")
+    implementation("com.squareup:kotlinpoet:1.16.0")
+    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.0")
     testImplementation(kotlin("test"))
 }
 
