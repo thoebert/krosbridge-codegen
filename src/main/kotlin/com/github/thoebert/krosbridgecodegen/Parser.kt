@@ -1,79 +1,114 @@
 package com.github.thoebert.krosbridgecodegen
-import com.github.h0tk3y.betterParse.combinators.*
-import com.github.h0tk3y.betterParse.grammar.Grammar
-import com.github.h0tk3y.betterParse.grammar.parseToEnd
-import com.github.h0tk3y.betterParse.lexer.literalToken
-import com.github.h0tk3y.betterParse.lexer.regexToken
-import com.github.h0tk3y.betterParse.parser.Parser
 
 
-object FieldsGrammar : Grammar<List<List<Field>>>() {
-    val space by regexToken("[\\ \\t]*", ignore = true)
-    val newline by regexToken("\\n+", ignore = true)
-    val comment by regexToken("#.*\\n+", ignore = true)
-    val equals by literalToken("=")
-    val arrayStart by literalToken("[")
-    val arrayEnd by literalToken("]")
-    val groupSeparator by literalToken("---")
-    val digits by regexToken("\\d+")
-    val ident by regexToken("[\\w_\\-\\/]+")
+/**
+ * New parser for ROS messages
+ */
+class FieldsParser {
 
-    val lineSep by newline or comment
-    val text by (ident or digits) map { it.text }
-    val integer by digits map { it.text.toInt() }
+    var lines: List<String> = listOf()
 
-    inline fun <reified T> lined(p : Parser<T>) : Parser<T> {
-        return p * -optional(lineSep)
-    }
+    private val groups: MutableList<MutableList<Field>> = mutableListOf(mutableListOf())
 
-    val typeParser = text * optional(arrayStart * optional(integer) * arrayEnd) map { (text, arraySuffix) ->
-        if (arraySuffix != null){
-            if (arraySuffix.t2 != null){
-                text to arraySuffix.t2!!
-            } else {
-                text to 0
-            }
-        } else {
-            text to -1
+    fun parseField(position: Int, fatherField: Field? = null, groupPosition: Int = 0, nestedLevel: String = "") {
+        if (position > lines.lastIndex) {
+            if (groups.size == 0) groups.add(mutableListOf())
+            return
         }
+        if (position == lines.lastIndex && lines[position] == "---") {
+            groups.add(mutableListOf())
+            groups.add(mutableListOf())
+            return
+        }
+        if (lines[position].isBlank()) return parseField(
+            position + 1,
+            fatherField,
+            groupPosition = groupPosition,
+            nestedLevel
+        )
+        if (lines[position] == "---") {
+            groups.add(mutableListOf())
+            return parseField(position + 1, groupPosition = groupPosition + 1)
+        }
+        if (lines[position].startsWith("#")) return parseField(position + 1, groupPosition = groupPosition)
+        // regex demonstration: https://regex101.com/r/Fc8wUB/1
+        val matched =
+            Regex("(?<type>[\\w_\\-/]+|[\\d+])(\\[<?=?(?<size>\\d+)?]|<?=?(?<size2>\\d+))?\\s+(?<name>[\\w_\\-/]+)([\\s]{0,}?=[\\s]{0,}(?<value>\\S*[\\w_\\-/]+|[\\d+]))?").find(
+                lines[position]
+            )
+                ?: return parseField(position + 1)
+        // get values by group
+        val type = (matched.groups["type"] ?: return parseField(
+            position + 1,
+            fatherField,
+            groupPosition = groupPosition,
+            nestedLevel
+        )).value
+        val name = (matched.groups["name"] ?: return parseField(
+            position + 1,
+            fatherField,
+            groupPosition = groupPosition,
+            nestedLevel
+        )).value
+        val size = (matched.groups["size"] ?: matched.groups["size2"])?.value?.toInt() ?: -1
+        val value = matched.groups["value"]?.value
+        val normalType = createTypeFromString(type)
+        val field = Field(normalType, name, value = value, arrayLength = size)
+        var newPosition = position + 1
+        while (newPosition < lines.size && lines[newPosition].startsWith(nestedLevel + "\t")) {
+            parseField(
+                newPosition,
+                fatherField = field,
+                nestedLevel = nestedLevel + "\t",
+                groupPosition = groupPosition
+            )
+            newPosition++
+        }
+        if (fatherField == null) {
+            while (groupPosition >= groups.size) groups.add(mutableListOf())
+            // if (groupPosition == groups.size || (groupPosition == 1 && groups.size == 0) ) groups.add(mutableListOf())
+            groups[groupPosition].add(field)
+        } else {
+            fatherField.children.add(field)
+            return
+        }
+        parseField(newPosition, null, groupPosition = groupPosition, nestedLevel)
+
     }
 
-    val field by typeParser * text * optional(-equals * text) map { (type, name, value) ->
-        Field(createTypeFromString(type.first), name, value, type.second)
+    fun parseToEnd(value: String): List<List<Field>> {
+        groups.clear()
+        lines = value.reader().readLines()
+        parseField(position = 0)
+
+        return groups;
     }
-
-    val group by separated(field, lineSep, true) map { it.terms }
-
-    override val rootParser: Parser<List<List<Field>>> by separated(group, groupSeparator) * -optional(lineSep) map { it.terms }
 }
 
-fun parseFields(text: String) : List<List<Field>> {
-    val modText = text.replace("\r", "\n").plus("\n")
-    //println("Running $modText")
-    //com.github.thoebert.krosbridgecodegen.FieldsGrammar.tokenizer.tokenize(modText).forEach { println("${it.row} ${it.column} - ${it.type.name}: ${it.text}") }
-    return FieldsGrammar.parseToEnd(modText)
+fun parseFields(text: String): List<List<Field>> {
+    return FieldsParser().parseToEnd(text)
 }
 
-fun checkFields(fieldCount : Int, fields : List<List<Field>>){
+fun checkFields(fieldCount: Int, fields: List<List<Field>>) {
     if (fieldCount != fields.size) throw IllegalArgumentException("Expecting $fieldCount fields but parsed ${fields.size} fields")
 }
 
-fun parseAndCheckFields(fieldCount : Int, text: String) : List<List<Field>>{
+fun parseAndCheckFields(fieldCount: Int, text: String): List<List<Field>> {
     val fields = parseFields(text)
     checkFields(fieldCount, fields)
     return fields
 }
 
-fun parseMessage(name : Type, text: String) : Message {
+fun parseMessage(name: Type, text: String): Message {
     return Message(name, parseAndCheckFields(1, text)[0])
 }
 
-fun parseService(name : Type, text: String) : Service {
+fun parseService(name: Type, text: String): Service {
     val fields = parseAndCheckFields(2, text)
     return Service(name, fields[0], fields[1])
 }
 
-fun parseAction(name : Type, text: String) : Action {
+fun parseAction(name: Type, text: String): Action {
     val fields = parseAndCheckFields(3, text)
     return Action(name, fields[0], fields[1], fields[2])
 }

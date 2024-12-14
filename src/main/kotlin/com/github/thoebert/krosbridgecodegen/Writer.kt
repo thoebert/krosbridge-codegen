@@ -4,6 +4,7 @@ import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.plusParameter
 import java.io.File
+import java.io.FileFilter
 
 val primitiveTypes = mapOf(
     Type("bool") to BOOLEAN,
@@ -57,29 +58,51 @@ class Writer(val packagePrefix : String = ""){
         }
     }
 
-    fun writeMessage(folder: File, it: Message) {
+    private fun writeMessage(folder: File, it: Message) {
         writeTopicClass(folder, it)
         writeClass(folder, it.name, it.fields, messageClassName)
     }
 
-    fun writeService(folder: File, it: Service) {
+    private fun writeService(folder: File, it: Service) {
         writeServiceClass(folder, it)
         writeClass(folder, it.name.copyWithClassSuffix(requestSuffix), it.request, serviceRequestClassName)
         writeClass(folder, it.name.copyWithClassSuffix(responseSuffix), it.response, serviceResponseClassName)
     }
 
-    fun writeAction(folder: File, it: Action) {
+    private fun writeAction(folder: File, it: Action) {
         writeClass(folder, it.name.copyWithClassSuffix("Goal"), it.goal)
         writeClass(folder, it.name.copyWithClassSuffix("Result"), it.result)
         writeClass(folder, it.name.copyWithClassSuffix("Feedback"), it.feedback)
     }
 
-    fun prefixPackage(packageName : String?) : String {
+    private fun prefixPackage(packageName : String?) : String {
         if (packageName == null) return packagePrefix
         return "$packagePrefix.$packageName"
     }
 
-    fun writeClass(folder : File, name : Type, fields : List<Field>, parentName : ClassName? = null) {
+    private fun checkIfTypeExist(type: TypeName, folder: File): Boolean{
+        if (primitiveTypes.containsValue(type) || type == LIST) return true
+        return folder.listFiles(FileFilter { it.name == "$type.kt" })?.isNotEmpty() ?: false
+    }
+
+    private fun writeComplexType(field: Field, folder: File, packageName: String?){
+        if (!field.isComplex) return
+        if (checkIfTypeExist(mapType(field, currentPackage = field.type.packageName), folder)) return
+        val classBuilder = TypeSpec.classBuilder(field.type.className)
+        classBuilder.addAnnotation(AnnotationSpec.builder(serializableAnnotation).build())
+        val constructor = FunSpec.constructorBuilder()
+        field.children.filter { it.isVariable }.forEach {
+            val mappedType = mapType(it, field.type.packageName)
+            constructor.addParameter(it.name, mappedType)
+            classBuilder.addProperty(PropertySpec.builder(it.name, mappedType)
+                .initializer(it.name).build())
+            writeComplexType(it, folder, packageName)
+        }
+        classBuilder.primaryConstructor(constructor.build())
+        writeClassToFile(folder, classBuilder,  prefixPackage(packageName ), field.type.className)
+    }
+
+    private fun writeClass(folder : File, name : Type, fields : List<Field>, parentName : ClassName? = null) {
 
         val classBuilder = TypeSpec.classBuilder(name.className)
         parentName?.let { classBuilder.superclass(it) }
@@ -92,7 +115,7 @@ class Writer(val packagePrefix : String = ""){
             constructor.addParameter(it.name, mappedType)
             classBuilder.addProperty(PropertySpec.builder(it.name, mappedType)
                     .initializer(it.name).build())
-
+            writeComplexType(it, folder, name.packageName)
         }
         classBuilder.primaryConstructor(constructor.build())
 
@@ -109,6 +132,7 @@ class Writer(val packagePrefix : String = ""){
             classBuilder.addType(companionObject.build())
         }
 
+
         writeClassToFile(folder, classBuilder, prefixPackage(name.packageName), name.className)
     }
 
@@ -118,7 +142,7 @@ class Writer(val packagePrefix : String = ""){
         file.build().writeTo(folder)
     }
 
-    fun mapType(field : Field, currentPackage : String?) : TypeName {
+    private fun mapType(field : Field, currentPackage : String?) : TypeName {
         if (field.type.equals(Type("Header"))) return ClassName(prefixPackage("std_msgs"),"Header")
         if (field.type.equals(Type("time"))) return ClassName(prefixPackage("primitive"),"Time")
         if (field.type.equals(Type("duration"))) return ClassName(prefixPackage("primitive"),"Duration")
@@ -126,11 +150,11 @@ class Writer(val packagePrefix : String = ""){
         return if (field.isArray) LIST.parameterizedBy(baseType) else baseType
     }
 
-    fun mapPrimitiveType(name : Type) : ClassName{
+    private fun mapPrimitiveType(name : Type) : ClassName{
         return primitiveTypes[name] ?: throw IllegalArgumentException("Invalid primitive type $name")
     }
 
-    fun complexType(field : Field, currentPackage : String?) : ClassName {
+    private fun complexType(field : Field, currentPackage : String?) : ClassName {
         var packageName = field.type.packageName
         if (packageName == null){
             packageName = currentPackage
@@ -140,7 +164,7 @@ class Writer(val packagePrefix : String = ""){
         return ClassName(prefixPackage(packageName), field.type.className)
     }
 
-    fun writeServiceClass(folder: File, service: Service) {
+    private fun writeServiceClass(folder: File, service: Service) {
         val prefixedPackageName = prefixPackage(service.name.packageName)
 
         val requestClassName = ClassName(prefixedPackageName, service.name.copyWithClassSuffix(requestSuffix).className)
@@ -184,7 +208,7 @@ class Writer(val packagePrefix : String = ""){
 
     }
 
-    fun writeTopicClass(folder: File, message: Message) {
+    private fun writeTopicClass(folder: File, message: Message) {
         val prefixedPackageName = prefixPackage(message.name.packageName)
 
         val messageClassName = ClassName(prefixedPackageName, message.name.className)
